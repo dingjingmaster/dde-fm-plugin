@@ -65,6 +65,7 @@ static void send_data_to_daemon(IpcServerType type, short isCN, const char* file
     const int len = sizeof(address);
 
     if (0 != connect(sockFd, reinterpret_cast<struct sockaddr*>(&address), len)) {
+        close(sockFd);
         return;
     }
 
@@ -171,6 +172,10 @@ static int send_data_to_daemon(IpcServerType type, const char* sendData, int sen
         }
     } while (0);
 
+    if (sockFd >= 0) {
+        close(sockFd);
+    }
+
     STR_FREE(sendBuf);
 
     return res;
@@ -250,9 +255,16 @@ DFMEXT::DFMExtEmblem EmblemIconPlugins::locationEmblemIcons(const std::string &f
     }
     if (fstat.st_mode & S_IFREG) {
         // syslog(LOG_ERR, "[IPC] find any encrypted file: %s!", filePath.c_str());
-        const std::string iconPath = "/usr/local/andsec/data/andsec_lock.png";
         if (check_is_encrypt_file(filePath.c_str())) {
             std::vector<DFMEXT::DFMExtEmblemIconLayout> layouts;
+            const std::string iconPath = "/usr/local/andsec/data/andsec_lock.png";
+            DFMEXT::DFMExtEmblemIconLayout iconLayout { DFMEXT::DFMExtEmblemIconLayout::LocationType::BottomRight, iconPath };
+            layouts.push_back(iconLayout);
+            emblem.setEmblem(layouts);
+        }
+        else {
+            std::vector<DFMEXT::DFMExtEmblemIconLayout> layouts;
+            const std::string iconPath = "/usr/local/andsec/data/empty.png";
             DFMEXT::DFMExtEmblemIconLayout iconLayout { DFMEXT::DFMExtEmblemIconLayout::LocationType::BottomRight, iconPath };
             layouts.push_back(iconLayout);
             emblem.setEmblem(layouts);
