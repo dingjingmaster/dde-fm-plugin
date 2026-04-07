@@ -5,7 +5,7 @@
  * @brief 此头文件中不引入任何其他头文件
  */
 
-#define KERNEL_MODULE_NAME                  "sec_fs"
+#define KERNEL_MODULE_NAME                  "safe_fs"
 #define EXIT_CODE_WITH_RESTART              588
 #define TIMEOUT_TRAY_MSG                    5  * 1000
 #define CONNECT_TIME_OUT_NSEC	            (9 * 1000 * 10)
@@ -72,9 +72,9 @@
 
 #define ANDSEC_SANDBOX_SOCKET               "/usr/local/andsec/sandbox/data/sandbox.sock"
 #define ANDSEC_SANDBOX_BIN                  "/usr/local/andsec/sandbox/bin/andsec-sandbox"
-#define IPC_SERVER_SOCKET_PATH              "/usr/local/andsec/start/sec_daemon.sock"
+#define IPC_SERVER_SOCKET_PATH              "/usr/local/andsec/config/sec_daemon.sock"
 
-#define IPC_CLIENT_SOCKET_PATH              "/usr/local/andsec/start/andsec_status.sock"
+#define IPC_CLIENT_SOCKET_PATH              "/usr/local/andsec/config/andsec_status.sock"
 
 // cgroup v1 -- /sys/fs/cgroup/cpu/xxx/cgroup.procs
 // cgroup v2 -- /sys/fs/cgroup/xxx/cgroup.procs

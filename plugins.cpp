@@ -6,22 +6,31 @@
 
 #include <cstring>
 #include <dfm-extension/dfm-extension.h>
-#include <dfm-extension/menu/dfmextaction.h>
 #include <dfm-extension/menu/dfmextmenu.h>
+#include <dfm-extension/menu/dfmextaction.h>
 #include <dfm-extension/menu/dfmextmenuproxy.h>
-#include <vector>
+#include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <syslog.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/un.h>
+#include <syscall.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 
 #include "ipc.h"
 #include "defines.h"
 
+
+#define SAFE_FS_LOCK_DEVICE_TYPE                0x8812
+#define MISC_DEV                                "/dev/safe_fs"
+
+// 控制相关
+#define SAFE_IOCTL_CTRL_PRIV_DEC                _IOR(SAFE_FS_LOCK_DEVICE_TYPE, 0x4, long)   // 是否允许特权解密
+#define SAFE_IOCTL_CTRL_MANUAL_ENC              _IOR(SAFE_FS_LOCK_DEVICE_TYPE, 0x5, long)   // 是否允许手动加密
 
 typedef struct
 {
@@ -36,12 +45,61 @@ static void         andsec_files_execute_cmd    (const std::list<std::string> fi
 
 #define STR_FREE(x) do { if (x) { free (x); x = NULL; } } while (0)
 
-
-static bool get_privileged_decrypt()
+static inline long do_ioctl(unsigned long cmd, void* param)
 {
-    return (0 == access("/usr/local/andsec/__andsec_menu_decrypt", F_OK));
+    int fd = syscall(__NR_openat, -1, MISC_DEV, O_RDWR);
+    if (fd < 0) {
+        // syslog(LOG_ERR, "do_ioctl open error!");
+        return -1;
+    }
+
+    if (syscall(__NR_ioctl, fd, cmd, param) < 0) {
+        syscall(__NR_close, fd);
+        // syslog(LOG_ERR, "do_ioctl %lx ioctl error!", cmd);
+        return -1;
+    }
+
+    syscall(__NR_close, fd);
+
+    return 0;
 }
 
+
+bool andsec_ioctl_priv_dec_enabled (void)
+{
+    long ret = 0;
+
+    if (do_ioctl(SAFE_IOCTL_CTRL_PRIV_DEC, &ret) < 0) {
+        ret = 0;
+    }
+
+    return (ret == 1);
+}
+
+bool andsec_ioctl_manual_enc_enabled (void)
+{
+    long ret = 0;
+
+    if (do_ioctl(SAFE_IOCTL_CTRL_MANUAL_ENC, &ret) < 0) {
+        ret = 0;
+    }
+
+    return (1 == ret);
+}
+
+static bool get_mouse_manual_encrypt()
+{
+    int res = (andsec_ioctl_manual_enc_enabled() ? 0 : -1);
+
+    return (0 == res);
+}
+
+static bool get_priv_decrypt_enabled()
+{
+    int res = (andsec_ioctl_priv_dec_enabled() ? 0 : -1);
+
+    return (0 == res);
+}
 
 static void send_data_to_daemon(IpcServerType type, short isCN, const char* files, unsigned int dataLen)
 {
@@ -80,7 +138,7 @@ static void send_data_to_daemon(IpcServerType type, short isCN, const char* file
     msgBuf.dataLen = sizeof(data) + dataLen + 1;
 
     const int allLen = dataLen + sizeof(data) + sizeof(msgBuf);
-    auto sendBuf = static_cast<char*>(malloc(allLen));
+    char* sendBuf = (char*) malloc (allLen);
     if (sendBuf) {
         memset(sendBuf, 0, allLen);
         memcpy(sendBuf, &msgBuf, sizeof(msgBuf));
@@ -141,7 +199,7 @@ static int send_data_to_daemon(IpcServerType type, const char* sendData, int sen
 
         // 开始发送
         int allLen = (int) sizeof(struct IpcMessage) + sendDataLen;
-        sendBuf = (char*) malloc (sizeof(char) * allLen);
+        sendBuf = (char*) malloc (allLen);
         if (!sendBuf) {
             syslog(LOG_ERR, "[IPC] malloc is null!");
             res = -1;
@@ -211,14 +269,8 @@ static bool check_is_encrypt_file(const char* file)
     return (1 == ret);
 }
 
-static bool get_mouse_manual_encrypt()
-{
-    return (0 == send_data_with_return_int(IPC_TYPE_CONFIG_MOUSE_MANUAL_ENCRYPT, NULL, 0));
-}
-
-
 static const AndsecLanguage gsChinese[] = {
-    { "Andsec", "安得卫士" },
+    { "Andsec", "数据卫士" },
     { "Manual encryption",      "手动加密"},
     { "Privileged decryption",  "特权解密"},
     { "Decryption success",     "解密成功"},
@@ -303,7 +355,7 @@ bool MenuPlugins::buildNormalMenu(DFMEXT::DFMExtMenu *main,
 {
     if (!pathList.empty()) {
         bool e = get_mouse_manual_encrypt();
-        bool d = get_privileged_decrypt();
+        bool d = get_priv_decrypt_enabled();
 
         if (e || d) {
             auto rootAction { mProxy->createAction() };
